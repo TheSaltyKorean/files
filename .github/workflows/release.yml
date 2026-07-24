@@ -1,0 +1,63 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Compute version from tag
+        id: version
+        shell: pwsh
+        run: |
+          $v = $env:GITHUB_REF_NAME.TrimStart("v")
+          "version=$v" >> $env:GITHUB_OUTPUT
+
+      - name: Publish
+        shell: pwsh
+        run: >
+          dotnet publish src/QuickFiles/QuickFiles.csproj
+          -c Release -r win-x64 --self-contained
+          -o publish
+          "-p:Version=${{ steps.version.outputs.version }}"
+
+      - name: Install vpk
+        run: dotnet tool install -g vpk
+
+      - name: Download previous releases (enables delta updates)
+        continue-on-error: true
+        run: >
+          vpk download github
+          --repoUrl https://github.com/${{ github.repository }}
+          --token ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pack
+        run: >
+          vpk pack
+          --packId QuickFiles
+          --packVersion ${{ steps.version.outputs.version }}
+          --packDir publish
+          --mainExe QuickFiles.exe
+          --packTitle QuickFiles
+          --packAuthors "Randy Walker"
+          --icon src/QuickFiles/Assets/QuickFiles.ico
+
+      - name: Upload to GitHub Releases
+        run: >
+          vpk upload github
+          --repoUrl https://github.com/${{ github.repository }}
+          --token ${{ secrets.GITHUB_TOKEN }}
+          --publish
+          --releaseName "QuickFiles ${{ steps.version.outputs.version }}"
+          --tag ${{ github.ref_name }}
