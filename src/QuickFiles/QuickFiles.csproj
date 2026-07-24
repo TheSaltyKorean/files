@@ -11,7 +11,7 @@
     <StartupObject>QuickFiles.App</StartupObject>
     <ApplicationIcon>Assets\QuickFiles.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <Version>0.1.0</Version>
+    <Version>0.1.1</Version>
     <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
     <!-- Allows compiling the Windows-targeted project on non-Windows dev machines. -->

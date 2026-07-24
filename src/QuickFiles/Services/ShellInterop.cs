@@ -92,6 +92,111 @@ internal static class ShellInterop
         }
     }
 
+    // ---- Cursor / monitor info (for positioning the flyout) ----------------
+
+    /// <summary>All values in device pixels.</summary>
+    public readonly record struct FlyoutAnchor(Point Cursor, Rect Work, Rect Monitor);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct POINT
+    {
+        public int X;
+        public int Y;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct RECT
+    {
+        public int Left;
+        public int Top;
+        public int Right;
+        public int Bottom;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MONITORINFO
+    {
+        public int cbSize;
+        public RECT rcMonitor;
+        public RECT rcWork;
+        public uint dwFlags;
+    }
+
+    private const uint MONITOR_DEFAULTTONEAREST = 2;
+
+    [DllImport("user32.dll")]
+    private static extern bool GetCursorPos(out POINT pt);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr MonitorFromPoint(POINT pt, uint dwFlags);
+
+    [DllImport("user32.dll")]
+    private static extern bool GetMonitorInfoW(IntPtr hMonitor, ref MONITORINFO lpmi);
+
+    /// <summary>
+    /// Returns the cursor position plus the work/full bounds of the monitor it
+    /// is on. Captured when the flyout is summoned, the cursor sits on the
+    /// taskbar icon the user just clicked — so it anchors the flyout to it.
+    /// </summary>
+    public static FlyoutAnchor? GetFlyoutAnchor()
+    {
+        if (!GetCursorPos(out var pt))
+            return null;
+        var monitor = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+        if (monitor == IntPtr.Zero)
+            return null;
+        var info = new MONITORINFO { cbSize = Marshal.SizeOf<MONITORINFO>() };
+        if (!GetMonitorInfoW(monitor, ref info))
+            return null;
+
+        static Rect ToRect(RECT r) => new(r.Left, r.Top, r.Right - r.Left, r.Bottom - r.Top);
+        return new FlyoutAnchor(new Point(pt.X, pt.Y), ToRect(info.rcWork), ToRect(info.rcMonitor));
+    }
+
+    // ---- Recycle bin --------------------------------------------------------
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct SHFILEOPSTRUCTW
+    {
+        public IntPtr hwnd;
+        public uint wFunc;
+        public string pFrom;
+        public string? pTo;
+        public ushort fFlags;
+        [MarshalAs(UnmanagedType.Bool)]
+        public bool fAnyOperationsAborted;
+        public IntPtr hNameMappings;
+        public string? lpszProgressTitle;
+    }
+
+    private const uint FO_DELETE = 3;
+    private const ushort FOF_SILENT = 0x0004;
+    private const ushort FOF_NOCONFIRMATION = 0x0010;
+    private const ushort FOF_ALLOWUNDO = 0x0040;
+    private const ushort FOF_NOERRORUI = 0x0400;
+
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+    private static extern int SHFileOperationW(ref SHFILEOPSTRUCTW lpFileOp);
+
+    public static bool MoveToRecycleBin(string path)
+    {
+        try
+        {
+            var op = new SHFILEOPSTRUCTW
+            {
+                wFunc = FO_DELETE,
+                // pFrom must be double-null-terminated; the marshaler adds one.
+                pFrom = path + "\0",
+                fFlags = FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_SILENT | FOF_NOERRORUI,
+            };
+            return SHFileOperationW(ref op) == 0 && !op.fAnyOperationsAborted;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     // ---- File icons ---------------------------------------------------------
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]

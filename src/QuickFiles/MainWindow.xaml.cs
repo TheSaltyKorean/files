@@ -11,6 +11,7 @@ namespace QuickFiles;
 public partial class MainWindow : Window
 {
     private SettingsWindow? _settingsWindow;
+    private ShellInterop.FlyoutAnchor? _anchor;
 
     public MainWindow()
     {
@@ -18,16 +19,19 @@ public partial class MainWindow : Window
         SizeChanged += (_, _) =>
         {
             if (IsVisible)
-                PositionNearTaskbar();
+                PositionFlyout();
         };
     }
 
     public void ShowFlyout()
     {
+        // Capture the cursor now: the user just clicked the taskbar icon, so
+        // the cursor marks where the flyout should be anchored.
+        _anchor = ShellInterop.GetFlyoutAnchor();
         RefreshList();
         Show();
         UpdateLayout();
-        PositionNearTaskbar();
+        PositionFlyout();
         Activate();
     }
 
@@ -42,13 +46,70 @@ public partial class MainWindow : Window
         EmptyText.Visibility = files.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
-    private void PositionNearTaskbar()
+    // The window is 12 DIPs larger than the visible card on every side (the
+    // shadow margin), so offsets compensate to leave a small visible gap.
+    private const double ShadowMarginDip = 12;
+    private const double VisibleGapDip = 4;
+
+    private void PositionFlyout()
     {
-        // The OS work area excludes the taskbar, so the bottom-right corner of
-        // it sits just above/beside the taskbar wherever it is docked.
-        var workArea = SystemParameters.WorkArea;
-        Left = workArea.Right - ActualWidth - 4;
-        Top = workArea.Bottom - ActualHeight - 4;
+        if (_anchor is not { } anchor
+            || PresentationSource.FromVisual(this)?.CompositionTarget is not { } target)
+        {
+            var wa = SystemParameters.WorkArea;
+            Left = wa.Right - ActualWidth - 4;
+            Top = wa.Bottom - ActualHeight - 4;
+            return;
+        }
+
+        var scale = target.TransformToDevice;
+        double widthPx = ActualWidth * scale.M11;
+        double heightPx = ActualHeight * scale.M22;
+        double edgePadX = (VisibleGapDip - ShadowMarginDip) * scale.M11;
+        double edgePadY = (VisibleGapDip - ShadowMarginDip) * scale.M22;
+
+        var work = anchor.Work;
+        var mon = anchor.Monitor;
+        double leftPx, topPx;
+
+        // The side where the work area is inset from the monitor bounds is
+        // where the taskbar is docked. Center the flyout on the cursor along
+        // that edge, i.e. directly above/beside the icon that was clicked.
+        if (work.Bottom < mon.Bottom)
+        {
+            topPx = work.Bottom - heightPx - edgePadY;
+            leftPx = anchor.Cursor.X - widthPx / 2;
+        }
+        else if (work.Top > mon.Top)
+        {
+            topPx = work.Top + edgePadY;
+            leftPx = anchor.Cursor.X - widthPx / 2;
+        }
+        else if (work.Left > mon.Left)
+        {
+            leftPx = work.Left + edgePadX;
+            topPx = anchor.Cursor.Y - heightPx / 2;
+        }
+        else if (work.Right < mon.Right)
+        {
+            leftPx = work.Right - widthPx - edgePadX;
+            topPx = anchor.Cursor.Y - heightPx / 2;
+        }
+        else
+        {
+            // Auto-hidden taskbar: no inset anywhere; assume bottom.
+            topPx = work.Bottom - heightPx - edgePadY;
+            leftPx = anchor.Cursor.X - widthPx / 2;
+        }
+
+        leftPx = Math.Clamp(leftPx, work.Left + edgePadX,
+            Math.Max(work.Left + edgePadX, work.Right - widthPx - edgePadX));
+        topPx = Math.Clamp(topPx, work.Top + edgePadY,
+            Math.Max(work.Top + edgePadY, work.Bottom - heightPx - edgePadY));
+
+        var toDip = target.TransformFromDevice;
+        Left = leftPx * toDip.M11;
+        Top = topPx * toDip.M22;
     }
 
     private void Window_Deactivated(object? sender, EventArgs e)
@@ -103,6 +164,15 @@ public partial class MainWindow : Window
         }
         e.Handled = true;
         Hide();
+    }
+
+    private void Delete_Click(object sender, RoutedEventArgs e)
+    {
+        e.Handled = true;
+        if ((sender as Button)?.Tag is not RecentFile file)
+            return;
+        ShellInterop.MoveToRecycleBin(file.FullPath);
+        RefreshList();
     }
 
     private static void TryShellOpen(string path)

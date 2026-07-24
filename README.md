@@ -6,6 +6,10 @@ the taskbar, left-click it, and get an instant list of your most recent
 downloaded/last opened, and its folder.
 
 - Click a file to open it; click the folder path to reveal it in Explorer.
+- The flyout pops up directly above the taskbar icon you clicked (works with
+  the taskbar docked to any edge, and on any monitor).
+- Delete a file straight from the list (trash button — it goes to the Recycle
+  Bin, so it's recoverable).
 - Configure how many files you see (5–50), the sort order, and which sources
   are included (Downloads folder, Windows recent items).
 - Per-user install — no admin rights needed.
