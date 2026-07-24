@@ -20,6 +20,7 @@ public sealed class RecentFile
 
     public string OriginDisplay => Origin == FileOrigin.Downloaded ? "Downloaded" : "Opened";
 
+    /// <summary>Short label; the full timestamp is shown in the tooltip.</summary>
     public string TimeDisplay
     {
         get
@@ -28,12 +29,14 @@ public sealed class RecentFile
             if (Timestamp.Date == now.Date)
                 return Timestamp.ToString("t");
             if (Timestamp.Date == now.Date.AddDays(-1))
-                return "Yesterday " + Timestamp.ToString("t");
+                return "Yesterday";
             if (Timestamp > now.AddDays(-6))
-                return Timestamp.ToString("ddd t");
+                return Timestamp.ToString("ddd");
             if (Timestamp.Year == now.Year)
                 return Timestamp.ToString("MMM d");
             return Timestamp.ToString("MMM d, yyyy");
         }
     }
+
+    public string FullTimeDisplay => Timestamp.ToString("f");
 }
