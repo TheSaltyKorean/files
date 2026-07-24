@@ -154,6 +154,20 @@ public partial class MainWindow : Window
     {
         if ((sender as Hyperlink)?.Tag is not RecentFile file)
             return;
+        e.Handled = true;
+        RevealInExplorer(file);
+    }
+
+    private void OpenFolder_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as Button)?.Tag is not RecentFile file)
+            return;
+        e.Handled = true;
+        RevealInExplorer(file);
+    }
+
+    private void RevealInExplorer(RecentFile file)
+    {
         try
         {
             Process.Start("explorer.exe", $"/select,\"{file.FullPath}\"");
@@ -162,7 +176,6 @@ public partial class MainWindow : Window
         {
             TryShellOpen(file.Folder);
         }
-        e.Handled = true;
         Hide();
     }
 
